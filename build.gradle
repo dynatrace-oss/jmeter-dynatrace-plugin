@@ -1,0 +1,30 @@
+plugins {
+    id 'java'
+}
+
+group 'com.dynatrace.jmeter.plugins'
+version '1.1-SNAPSHOT'
+
+repositories {
+    mavenCentral() {
+        // workaround for https://bz.apache.org/bugzilla/show_bug.cgi?id=64465
+        // see https://discuss.gradle.org/t/opt-out-of-gradle-module-metadata-for-a-specific-dependency/37051/2
+        metadataSources {
+            mavenPom()
+            ignoreGradleMetadataRedirection()
+        }
+    }
+}
+
+dependencies {
+    implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.0'
+    implementation group: 'commons-io', name: 'commons-io', version: '2.6'
+    implementation group: 'org.apache.httpcomponents', name: 'httpcore', version: '4.4.13'
+    implementation group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.12'
+    implementation group: 'org.apache.httpcomponents', name: 'httpcore-nio', version: '4.4.13'
+    implementation group: 'org.apache.httpcomponents', name: 'httpasyncclient', version: '4.1.4'
+    implementation group: 'org.apache.jmeter', name: 'ApacheJMeter_core', version: '5.3'
+    implementation group: 'org.apache.jmeter', name: 'ApacheJMeter_components', version: '5.3'
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.10.3'
+    testImplementation group: 'junit', name: 'junit', version: '4.12'
+}
