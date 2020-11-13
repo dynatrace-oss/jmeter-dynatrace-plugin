@@ -104,10 +104,60 @@ public class MintMetricSender {
 		this.writeAndSendMetrics(copyMetrics);
 	}
 
+	public synchronized void checkConnection() throws MintConnectionException {
+		try {
+			if (httpRequest == null) {
+				httpRequest = this.createRequest(this.url, this.token);
+			}
+			log.debug("Sending empty metrics: {}");
+			httpRequest.setEntity(new StringEntity("", StandardCharsets.UTF_8));
+			lastRequest = httpClient.execute(httpRequest, new FutureCallback<HttpResponse>() {
+				public void completed(HttpResponse response) {
+				}
+
+				public void failed(Exception ex) {
+				}
+
+				public void cancelled() {
+				}
+			});
+
+		} catch (URISyntaxException ex) {
+			//
+		}
+		try {
+			final HttpResponse lastResponse = lastRequest.get(1L, TimeUnit.SECONDS);
+			int code = lastResponse.getStatusLine().getStatusCode();
+			if (MetricUtils.isSuccessCode(code)) {
+				log.debug("Successfully checked connection");
+			} else {
+				log.debug("Error writing metrics to MINT Url: {}, responseCode: {}, responseBody: {}",
+						new Object[] { url, code, getBody(lastResponse) });
+
+				switch (code) {
+				case 400:
+					// ok, message because of empty request: responseCode: 400, responseBody: {"linesOk":0,"linesInvalid":0,"error":{"code":400,"message":"empty request","invalidLines":[]}}
+					break;
+				case 401:
+					throw new MintConnectionException("Error executing connection check for MINT server: Invalid token");
+				case 404:
+				case 405:
+					throw new MintConnectionException("Error executing connection check for MINT server: Invalid url");
+				default:
+					throw new MintConnectionException("Error executing connection check for MINT server: Other error");
+				}
+			}
+
+		} catch (ExecutionException | TimeoutException | InterruptedException ex) {
+			log.debug("Error executing connection check for MINT server", ex);
+			throw new MintConnectionException("General Error executing connection check for MINT server");
+		}
+	}
+
 	private void writeAndSendMetrics(final List<MintMetricsLine> copyMetrics) {
 		try {
-			if (this.httpRequest == null) {
-				this.httpRequest = this.createRequest(this.url, this.token);
+			if (httpRequest == null) {
+				httpRequest = this.createRequest(url, token);
 			}
 
 			StringBuilder message = new StringBuilder();
@@ -118,8 +168,8 @@ public class MintMetricSender {
 			}
 
 			log.debug("Sending metrics: {}", message.toString());
-			this.httpRequest.setEntity(new StringEntity(message.toString(), StandardCharsets.UTF_8));
-			this.lastRequest = this.httpClient.execute(this.httpRequest, new FutureCallback<HttpResponse>() {
+			httpRequest.setEntity(new StringEntity(message.toString(), StandardCharsets.UTF_8));
+			lastRequest = httpClient.execute(httpRequest, new FutureCallback<HttpResponse>() {
 				public void completed(HttpResponse response) {
 					int code = response.getStatusLine().getStatusCode();
 					if (MetricUtils.isSuccessCode(code)) {
@@ -163,16 +213,18 @@ public class MintMetricSender {
 	public void destroy() {
 		log.info("Destroying ");
 
-		try {
-			this.lastRequest.get(5L, TimeUnit.SECONDS);
-		} catch (ExecutionException | TimeoutException | InterruptedException var2) {
-			log.error("Error waiting for last request to be send to MINT server", var2);
+		if (lastRequest != null) {
+			try {
+				lastRequest.get(5L, TimeUnit.SECONDS);
+			} catch (ExecutionException | TimeoutException | InterruptedException var2) {
+				log.error("Error waiting for last request to be send to MINT server", var2);
+			}
 		}
 
-		if (this.httpRequest != null) {
-			this.httpRequest.abort();
+		if (httpRequest != null) {
+			httpRequest.abort();
 		}
 
-		IOUtils.closeQuietly(this.httpClient);
+		IOUtils.closeQuietly(httpClient);
 	}
 }

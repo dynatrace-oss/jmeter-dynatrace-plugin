@@ -51,12 +51,14 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 	private MintMetricSender mintMetricSender;
 	private Map<String, String> testDimensions = new HashMap<>();
 	private Map<String, String> transactionDimensions = new HashMap<>();
+	private boolean enabled;
 
 	static {
 		DEFAULT_ARGS.put("dynatraceMetricIngestUrl", "https://DT_SERVER/api/v2/metrics/ingest");
 		DEFAULT_ARGS.put("dynatraceApiToken", "****");
 		DEFAULT_ARGS.put("testDimensions", "testName=${__TestPlanName}");
 		DEFAULT_ARGS.put("transactionDimensions", "dt.entity.service=SERVICE-XXXXXXXXXXXXX");
+		DEFAULT_ARGS.put("enabled", "true");
 	}
 
 	@Override
@@ -68,7 +70,6 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 		mintMetricSender = new MintMetricSender();
 		String dynatraceMetricIngestUrl = context.getParameter("dynatraceMetricIngestUrl");
 		String dynatraceApiToken = context.getParameter("dynatraceApiToken");
-		mintMetricSender.setup(dynatraceMetricIngestUrl, dynatraceApiToken);
 
 		final String testDimensionString = context.getParameter("testDimensions", "");
 		final String transactionDimensionString = context.getParameter("transactionDimensions", "");
@@ -80,6 +81,8 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 						a -> a[1]   //value
 				)));
 		transactionDimensions.putAll(Arrays.stream(transactionDimensionString.split("[, ]"))
+				// filter default dimension SERVICE-XXXXXXXXXXXXX
+				.filter(strings -> !strings.equals(DEFAULT_ARGS.get("transactionDimensions")))
 				.map(s -> s.split("[= ]"))
 				.filter(strings -> strings.length == 2)
 				.collect(Collectors.toMap(
@@ -87,9 +90,26 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 						a -> a[1]   //value
 				)));
 
+		String enableParam = context.getParameter("enabled", "true");
+		enabled = Boolean.parseBoolean(enableParam);
+		log.info("Configured enabled state {}", enabled);
 		log.info("Configured test dimensions {}", testDimensions);
 		log.info("Configured transaction dimensions {}", transactionDimensions);
-		log.info("Start MINT metric sender for url {}", dynatraceMetricIngestUrl);
+
+		if (enabled) {
+			// only check the connection if the plugin was enabled
+			try {
+				mintMetricSender.setup(dynatraceMetricIngestUrl, dynatraceApiToken);
+				mintMetricSender.checkConnection();
+				log.info("Start MINT metric sender for url {}", dynatraceMetricIngestUrl);
+			} catch (Exception ex) {
+				log.info("Start MINT metric sender for url {} failed with {}, setting enabled state to false",
+						dynatraceMetricIngestUrl, ex.getMessage());
+				// disable the plugin when the connection check fails
+				enabled = false;
+			}
+		}
+		log.info("Enabled state {}", enabled);
 	}
 
 	@Override
@@ -106,8 +126,10 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 			Thread.currentThread().interrupt();
 		}
 
-		log.info("Sending last metrics");
-		this.sendMetrics();
+		if (enabled) {
+			log.info("Sending last metrics");
+			this.sendMetrics();
+		}
 
 		mintMetricSender.destroy();
 		super.teardownTest(context);
@@ -144,10 +166,14 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 	@Override
 	public void run() {
 		log.debug("run started");
-		try {
-			sendMetrics();
-		} catch (Exception ex) {
-			log.error("Failed to send metrics", ex);
+		if (enabled) {
+			try {
+				sendMetrics();
+			} catch (Exception ex) {
+				log.error("Failed to send metrics", ex);
+			}
+		} else {
+			log.debug("skip sending metrics because the plugin has been disabled");
 		}
 		log.debug("run finished");
 	}
