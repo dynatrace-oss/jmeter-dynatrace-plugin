@@ -19,7 +19,10 @@ package com.dynatrace.jmeter.plugins;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Scanner;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -50,6 +53,13 @@ public class MintMetricSender {
 	private static final Logger log = LoggerFactory.getLogger(MintMetricSender.class);
 	private static final String AUTHORIZATION_HEADER_NAME = "Authorization";
 	private static final String AUTHORIZATION_HEADER_VALUE = "Api-token ";
+	private static final int CONNECT_TIMEOUT = 10_000;
+	private static final int SOCKET_TIMEOUT = 30_000;
+	private static final int MAX_CONNECTIONS = 10;
+	private static final int MAX_THREADS = 5;
+	// limits for sending a single message
+	static final int MAX_LINES_PER_MESSAGE = 1000;
+	static final int MAX_MESSAGE_SIZE_BYTES = 1048576;
 	private CloseableHttpAsyncClient httpClient;
 	private HttpPost httpRequest;
 	private URL url;
@@ -64,19 +74,22 @@ public class MintMetricSender {
 		this.url = new URL(mintIngestUrl);
 		this.token = mintIngestToken;
 
-		IOReactorConfig ioReactorConfig = IOReactorConfig.custom().setIoThreadCount(1).setConnectTimeout(1000).setSoTimeout(3000)
+		IOReactorConfig ioReactorConfig = IOReactorConfig.custom().setIoThreadCount(MAX_THREADS).setConnectTimeout(CONNECT_TIMEOUT)
+				.setSoTimeout(SOCKET_TIMEOUT)
 				.build();
 		ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor(ioReactorConfig);
 		PoolingNHttpClientConnectionManager connManager = new PoolingNHttpClientConnectionManager(ioReactor);
-		httpClient = HttpAsyncClientBuilder.create().setConnectionManager(connManager).setMaxConnPerRoute(2).setMaxConnTotal(2)
+		httpClient = HttpAsyncClientBuilder.create().setConnectionManager(connManager).setMaxConnPerRoute(MAX_CONNECTIONS)
+				.setMaxConnTotal(MAX_CONNECTIONS)
 				.setUserAgent("ApacheJMeter 5").disableCookieManagement().disableConnectionState().build();
 		httpRequest = createRequest(this.url, this.token);
 		httpClient.start();
 	}
 
 	private HttpPost createRequest(URL url, String token) throws URISyntaxException {
-		RequestConfig defaultRequestConfig = RequestConfig.custom().setConnectTimeout(1000).setSocketTimeout(3000)
-				.setConnectionRequestTimeout(100).build();
+		RequestConfig defaultRequestConfig = RequestConfig.custom().setConnectTimeout(CONNECT_TIMEOUT)
+				.setSocketTimeout(SOCKET_TIMEOUT)
+				.setConnectionRequestTimeout(CONNECT_TIMEOUT).build();
 		HttpPost currentHttpRequest = new HttpPost(url.toURI());
 		currentHttpRequest.setConfig(defaultRequestConfig);
 		if (StringUtils.isNotBlank(token)) {
@@ -93,15 +106,20 @@ public class MintMetricSender {
 	}
 
 	public synchronized void writeAndSendMetrics() {
-		List<MintMetricsLine> copyMetrics;
 		if (metrics.isEmpty()) {
 			return;
 		}
 
-		copyMetrics = metrics;
+		final List<MintMetricsLine> copyMetrics = new ArrayList<>(metrics);
 		metrics = new CopyOnWriteArrayList<>();
 
-		this.writeAndSendMetrics(copyMetrics);
+		final List<String> splitMessages = splitMessages(copyMetrics);
+		if (splitMessages.size() > 1) {
+			log.info("Splitted the message into {} requests", splitMessages.size());
+		}
+		for (String splitMessage : splitMessages) {
+			writeAndSendMetrics(splitMessage);
+		}
 	}
 
 	public synchronized void checkConnection() throws MintConnectionException {
@@ -154,31 +172,26 @@ public class MintMetricSender {
 		}
 	}
 
-	private void writeAndSendMetrics(final List<MintMetricsLine> copyMetrics) {
+	private void writeAndSendMetrics(final String message) {
 		try {
 			if (httpRequest == null) {
 				httpRequest = this.createRequest(url, token);
 			}
 
-			StringBuilder message = new StringBuilder();
+			log.debug("Sending metrics: {}", message);
+			final int nrLines = getLineCount(message);
 
-			for (MintMetricsLine l : copyMetrics) {
-				message.append(l.printMessage());
-				message.append(System.getProperty("line.separator"));
-			}
-
-			log.debug("Sending metrics: {}", message.toString());
-			httpRequest.setEntity(new StringEntity(message.toString(), StandardCharsets.UTF_8));
+			httpRequest.setEntity(new StringEntity(message, StandardCharsets.UTF_8));
 			lastRequest = httpClient.execute(httpRequest, new FutureCallback<HttpResponse>() {
 				public void completed(HttpResponse response) {
 					int code = response.getStatusLine().getStatusCode();
 					if (MetricUtils.isSuccessCode(code)) {
-						log.info("Success, number of metrics written: {}", copyMetrics.size());
-						log.debug("Last message: {}", message.toString());
+						log.info("Success, number of metrics written: {}", nrLines);
+						log.debug("Last message: {}", message);
 					} else {
 						log.error("Error writing metrics to MINT Url: {}, responseCode: {}, responseBody: {}",
 								new Object[] { url, code, getBody(response) });
-						log.info("Last message: {}", message.toString());
+						log.info("Last message: {}", message);
 					}
 
 				}
@@ -195,6 +208,48 @@ public class MintMetricSender {
 			log.error(var5.getMessage(), var5);
 		}
 
+	}
+
+	List<String> splitMessages(final List<MintMetricsLine> copyMetrics) {
+		final List<String> splitMessages = new ArrayList<>();
+		Iterator<MintMetricsLine> metricsIterator = copyMetrics.iterator();
+		int metricLines = 0;
+		int metricSize = 0;
+		StringBuilder metricMessage = new StringBuilder();
+		while (metricsIterator.hasNext()) {
+			final MintMetricsLine metricsLine = metricsIterator.next();
+			String message = metricsLine.printMessage() + System.getProperty("line.separator");
+			if (metricLines + 1 < MAX_LINES_PER_MESSAGE && metricSize + message.length() < MAX_MESSAGE_SIZE_BYTES) {
+				metricMessage.append(message);
+				metricLines++;
+				metricSize = metricMessage.length();
+			} else {
+				// add the previous message content to the list
+				splitMessages.add(metricMessage.toString());
+				// create e new buffer and add the first message to the buffer
+				metricMessage = new StringBuilder(message);
+				metricLines = 1;
+				metricSize = metricMessage.length();
+			}
+			metricsIterator.remove();
+		}
+		// add the last metric message if there is one
+		if (metricMessage.length() > 0) {
+			splitMessages.add(metricMessage.toString());
+		}
+		return splitMessages;
+	}
+
+	int getLineCount(final String message) {
+		int lines = 0;
+		if (message != null) {
+			final Scanner scanner = new Scanner(message);
+			while (scanner.hasNextLine()) {
+				scanner.nextLine();
+				lines++;
+			}
+		}
+		return lines;
 	}
 
 	private static String getBody(HttpResponse response) {
