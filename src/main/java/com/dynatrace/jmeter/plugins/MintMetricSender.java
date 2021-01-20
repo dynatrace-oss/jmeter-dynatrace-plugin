@@ -144,12 +144,12 @@ public class MintMetricSender {
 			//
 		}
 		try {
-			final HttpResponse lastResponse = lastRequest.get(1L, TimeUnit.SECONDS);
+			final HttpResponse lastResponse = lastRequest.get(CONNECT_TIMEOUT, TimeUnit.MILLISECONDS);
 			int code = lastResponse.getStatusLine().getStatusCode();
 			if (MetricUtils.isSuccessCode(code)) {
 				log.debug("Successfully checked connection");
 			} else {
-				log.debug("Error writing metrics to MINT Url: {}, responseCode: {}, responseBody: {}",
+				log.warn("Error writing metrics to MINT Url: {}, responseCode: {}, responseBody: {}",
 						new Object[] { url, code, getBody(lastResponse) });
 
 				switch (code) {
@@ -167,7 +167,7 @@ public class MintMetricSender {
 			}
 
 		} catch (ExecutionException | TimeoutException | InterruptedException ex) {
-			log.debug("Error executing connection check for MINT server", ex);
+			log.warn("Error executing connection check for MINT server", ex);
 			throw new MintConnectionException("General Error executing connection check for MINT server");
 		}
 	}
