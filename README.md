@@ -24,17 +24,29 @@ Copy this generated jar to the apache-jmeter-5.3\lib\ext folder and (re-)start J
 * Open your JMeter jmx file
 * Add `Listener` > `Backend Listener`
 * Select `Backend Listener implementation`: `com.dynatrace.jmeter.plugins.MintBackendListener`
-* Change the parameters:
-    * `dynatraceMetricIngestUrl`: the URL of your monitoring environment with the suffix `/api/v2/metrics/ingest`
-    * `dynatraceApiToken`: the API token which you generated for your Dynatrace API integration
-    * `testDimensions`: a comma-separated list of key=value pairs which will be used as dimensions for the test related metrics. 
-    * `transactionDimensions`: a comma-separated list of key=value pairs which will be used as dimensions for the test step related metrics.
-* Start the load test    
+* Change the required parameters:
+  * `dynatraceMetricIngestUrl`: the URL of your monitoring environment with the suffix `/api/v2/metrics/ingest`
+  * `dynatraceApiToken`: the API token which you generated for your Dynatrace API integration
+  * `transactionDimensions`: a comma-separated list of key=value pairs which will be used as dimensions for the test step related
+    metrics. You must either replace the "dt.entity.service=SERVICE-XXXXXXXXXXXXX" with the correct service id or remove/replace the
+    parameter.
+* Change the optional parameters if needed:
+  * `testDimensions`: a comma-separated list of key=value pairs which will be used as dimensions for the test related metrics.
+  * `enabled`: allows to disable this plugin from outside without changing the jmeter script itself by passing the
+    parameter `-Jenabled=false` to the start script.
+  * `name`: The name of the listener which will be used as prefix for the log messages. If you have multiple listeners for multiple
+    thread groups you should use unique names.
+* Start the load test
 
+### Debug logging
+
+If you want to enable debug logs for this plugin, please add the line `<Logger name="com.dynatrace.jmeter.plugins" level="debug" />`
+to the `log4j2.xml` file in the JMeter `bin` folder.
 
 # MINT metrics
 
 When the JMeter test is running, it will generate the specified general metrics:
+
 * `jmeter.usermetrics.startedthreads`: the number of started threads
 * `jmeter.usermetrics.finishedthreads`: the number of finished threads
 * `jmeter.usermetrics.minactivethreads`: the minimum number of active threads

@@ -64,15 +64,17 @@ public class MintMetricSender {
 	private HttpPost httpRequest;
 	private URL url;
 	private String token;
+	private String name;
 	private Future<HttpResponse> lastRequest;
 	private List<MintMetricsLine> metrics = new CopyOnWriteArrayList<>();
 
 	public MintMetricSender() {
 	}
 
-	public synchronized void setup(String mintIngestUrl, String mintIngestToken) throws Exception {
+	public synchronized void setup(String name, String mintIngestUrl, String mintIngestToken) throws Exception {
 		this.url = new URL(mintIngestUrl);
 		this.token = mintIngestToken;
+		this.name = name;
 
 		IOReactorConfig ioReactorConfig = IOReactorConfig.custom().setIoThreadCount(MAX_THREADS).setConnectTimeout(CONNECT_TIMEOUT)
 				.setSoTimeout(SOCKET_TIMEOUT)
@@ -96,12 +98,12 @@ public class MintMetricSender {
 			currentHttpRequest.setHeader(AUTHORIZATION_HEADER_NAME, AUTHORIZATION_HEADER_VALUE + token);
 		}
 
-		log.debug("Created MintMetricSender with url: {}", url);
+		log.debug("{}: Created MintMetricSender with url: {}", name, url);
 		return currentHttpRequest;
 	}
 
 	public synchronized void addMetric(MintMetricsLine line) {
-		log.debug("addMetric({})", line);
+		log.debug("{}: addMetric({})", name, line);
 		metrics.add(line);
 	}
 
@@ -115,7 +117,7 @@ public class MintMetricSender {
 
 		final List<String> splitMessages = splitMessages(copyMetrics);
 		if (splitMessages.size() > 1) {
-			log.info("Splitted the message into {} requests", splitMessages.size());
+			log.info("{}: Splitted the message into {} requests", name, splitMessages.size());
 		}
 		for (String splitMessage : splitMessages) {
 			writeAndSendMetrics(splitMessage);
@@ -127,7 +129,7 @@ public class MintMetricSender {
 			if (httpRequest == null) {
 				httpRequest = this.createRequest(this.url, this.token);
 			}
-			log.debug("Sending empty metrics: {}");
+			log.debug("{}: Sending empty metrics", name);
 			httpRequest.setEntity(new StringEntity("", StandardCharsets.UTF_8));
 			lastRequest = httpClient.execute(httpRequest, new FutureCallback<HttpResponse>() {
 				public void completed(HttpResponse response) {
@@ -147,10 +149,10 @@ public class MintMetricSender {
 			final HttpResponse lastResponse = lastRequest.get(CONNECT_TIMEOUT, TimeUnit.MILLISECONDS);
 			int code = lastResponse.getStatusLine().getStatusCode();
 			if (MetricUtils.isSuccessCode(code)) {
-				log.debug("Successfully checked connection");
+				log.debug("{}: Successfully checked connection", name);
 			} else {
-				log.warn("Error writing metrics to MINT Url: {}, responseCode: {}, responseBody: {}",
-						new Object[] { url, code, getBody(lastResponse) });
+				log.warn("{}: Error writing metrics to MINT Url: {}, responseCode: {}, responseBody: {}",
+						name, new Object[] { url, code, getBody(lastResponse) });
 
 				switch (code) {
 				case 400:
@@ -167,7 +169,7 @@ public class MintMetricSender {
 			}
 
 		} catch (ExecutionException | TimeoutException | InterruptedException ex) {
-			log.warn("Error executing connection check for MINT server", ex);
+			log.warn("{}: Error executing connection check for MINT server: {}", name, ex.getMessage());
 			throw new MintConnectionException("General Error executing connection check for MINT server");
 		}
 	}
@@ -178,7 +180,7 @@ public class MintMetricSender {
 				httpRequest = this.createRequest(url, token);
 			}
 
-			log.debug("Sending metrics: {}", message);
+			log.debug("{}: Sending metrics: {}", name, message);
 			final int nrLines = getLineCount(message);
 
 			httpRequest.setEntity(new StringEntity(message, StandardCharsets.UTF_8));
@@ -186,26 +188,26 @@ public class MintMetricSender {
 				public void completed(HttpResponse response) {
 					int code = response.getStatusLine().getStatusCode();
 					if (MetricUtils.isSuccessCode(code)) {
-						log.info("Success, number of metrics written: {}", nrLines);
-						log.debug("Last message: {}", message);
+						log.info("{}: Success, number of metrics written: {}", name, nrLines);
+						log.debug("{}: Last message: {}", name, message);
 					} else {
-						log.error("Error writing metrics to MINT Url: {}, responseCode: {}, responseBody: {}",
-								new Object[] { url, code, getBody(response) });
-						log.info("Last message: {}", message);
+						log.error("{}: Error writing metrics to MINT Url: {}, responseCode: {}, responseBody: {}",
+								name, new Object[] { url, code, getBody(response) });
+						log.info("{}: Last message: {}", name, message);
 					}
 
 				}
 
 				public void failed(Exception ex) {
-					log.error("failed to send data to MINT server.", ex);
+					log.error("{}: failed to send data to MINT server: {}", name, ex.getMessage());
 				}
 
 				public void cancelled() {
-					log.warn("Request to MINT server was cancelled");
+					log.warn("{}: Request to MINT server was cancelled", nrLines);
 				}
 			});
-		} catch (URISyntaxException var5) {
-			log.error(var5.getMessage(), var5);
+		} catch (URISyntaxException ex) {
+			log.error(ex.getMessage(), ex);
 		}
 
 	}
@@ -259,20 +261,20 @@ public class MintMetricSender {
 			if (response != null && response.getEntity() != null) {
 				body = EntityUtils.toString(response.getEntity());
 			}
-		} catch (Exception var3) {
+		} catch (Exception ex) {
 		}
 
 		return body;
 	}
 
 	public void destroy() {
-		log.info("Destroying ");
+		log.info("{}: Destroying", name);
 
 		if (lastRequest != null) {
 			try {
 				lastRequest.get(5L, TimeUnit.SECONDS);
-			} catch (ExecutionException | TimeoutException | InterruptedException var2) {
-				log.error("Error waiting for last request to be send to MINT server", var2);
+			} catch (ExecutionException | TimeoutException | InterruptedException ex) {
+				log.error("{}: Error waiting for last request to be send to MINT server: {}", name, ex.getMessage());
 			}
 		}
 

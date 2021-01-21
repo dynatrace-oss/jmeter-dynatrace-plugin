@@ -52,24 +52,27 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 	private Map<String, String> testDimensions = new HashMap<>();
 	private Map<String, String> transactionDimensions = new HashMap<>();
 	private boolean enabled;
+	private String name;
 
 	static {
 		DEFAULT_ARGS.put("dynatraceMetricIngestUrl", "https://DT_SERVER/api/v2/metrics/ingest");
 		DEFAULT_ARGS.put("dynatraceApiToken", "****");
 		DEFAULT_ARGS.put("testDimensions", "testName=${__TestPlanName}");
 		DEFAULT_ARGS.put("transactionDimensions", "dt.entity.service=SERVICE-XXXXXXXXXXXXX");
-		DEFAULT_ARGS.put("enabled", "true");
+		DEFAULT_ARGS.put("enabled", "${__P(enabled, true)}");
+		DEFAULT_ARGS.put("name", "DT MINT Backendlistener");
 	}
 
 	@Override
 	public void setupTest(BackendListenerContext context) throws Exception {
 		super.setupTest(context);
-		log.info("Test started");
+		log.info("{}: Test started", context.getParameter("name"));
 		scheduler = Executors.newScheduledThreadPool(1);
 		timerHandle = this.scheduler.scheduleAtFixedRate(this, 0L, SEND_INTERVAL, TimeUnit.SECONDS);
 		mintMetricSender = new MintMetricSender();
 		String dynatraceMetricIngestUrl = context.getParameter("dynatraceMetricIngestUrl");
 		String dynatraceApiToken = context.getParameter("dynatraceApiToken");
+		name = context.getParameter("name");
 
 		final String testDimensionString = context.getParameter("testDimensions", "");
 		final String transactionDimensionString = context.getParameter("transactionDimensions", "");
@@ -92,42 +95,42 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 
 		String enableParam = context.getParameter("enabled", "true");
 		enabled = Boolean.parseBoolean(enableParam);
-		log.info("Configured enabled state {}", enabled);
-		log.info("Configured test dimensions {}", testDimensions);
-		log.info("Configured transaction dimensions {}", transactionDimensions);
+		log.info("{}: Configured enabled state {}", context.getParameter("name"), enabled);
+		log.info("{}: Configured test dimensions {}", context.getParameter("name"), testDimensions);
+		log.info("{}: Configured transaction dimensions {}", context.getParameter("name"), transactionDimensions);
 
 		if (enabled) {
 			// only check the connection if the plugin was enabled
 			try {
-				mintMetricSender.setup(dynatraceMetricIngestUrl, dynatraceApiToken);
+				mintMetricSender.setup(name, dynatraceMetricIngestUrl, dynatraceApiToken);
 				mintMetricSender.checkConnection();
-				log.info("Start MINT metric sender for url {}", dynatraceMetricIngestUrl);
+				log.info("{}: Start MINT metric sender for url {}", context.getParameter("name"), dynatraceMetricIngestUrl);
 			} catch (Exception ex) {
-				log.info("Start MINT metric sender for url {} failed with {}, setting enabled state to false",
-						dynatraceMetricIngestUrl, ex.getMessage());
+				log.info("{}: Start MINT metric sender for url {} failed with {}, setting enabled state to false",
+						context.getParameter("name"), dynatraceMetricIngestUrl, ex.getMessage());
 				// disable the plugin when the connection check fails
 				enabled = false;
 			}
 		}
-		log.info("Enabled state {}", enabled);
+		log.info("{}: Enabled state {}", context.getParameter("name"), enabled);
 	}
 
 	@Override
 	public void teardownTest(BackendListenerContext context) throws Exception {
-		log.info("Test finished");
+		log.info("{}: Test finished", context.getParameter("name"));
 		boolean cancelState = this.timerHandle.cancel(false);
-		log.debug("Canceled state: {}", cancelState);
+		log.debug("{}: Canceled state: {}", context.getParameter("name"), cancelState);
 		scheduler.shutdown();
 
 		try {
 			scheduler.awaitTermination(30L, TimeUnit.SECONDS);
 		} catch (InterruptedException var4) {
-			log.error("Error waiting for end of scheduler");
+			log.error("{}: Error waiting for end of scheduler", context.getParameter("name"));
 			Thread.currentThread().interrupt();
 		}
 
 		if (enabled) {
-			log.info("Sending last metrics");
+			log.info("{}: Sending last metrics", context.getParameter("name"));
 			this.sendMetrics();
 		}
 
@@ -146,7 +149,7 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 	@Override
 	public void handleSampleResults(List<SampleResult> sampleResults,
 			BackendListenerContext backendListenerContext) {
-		log.debug("handleSampleResults for {} samples", sampleResults.size());
+		log.debug("{}: handleSampleResults for {} samples", backendListenerContext.getParameter("name"), sampleResults.size());
 
 		UserMetric userMetrics = getUserMetrics();
 		for (SampleResult sampleResult : sampleResults) {
@@ -155,27 +158,30 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 			cumulatedMetrics.add(sampleResult);
 		}
 
-		log.debug("handleSampleResults: UserMetrics(startedThreads={}, finishedThreads={})", getUserMetrics().getStartedThreads(),
+		log.debug("{}: handleSampleResults: UserMetrics(startedThreads={}, finishedThreads={})",
+				backendListenerContext.getParameter("name"),
+				getUserMetrics().getStartedThreads(),
 				getUserMetrics().getFinishedThreads());
 		final SamplerMetric allCumulatedMetrics = this.getSamplerMetric("all");
-		log.debug("handleSampleResults: cumulatedMetrics(hits={}, errors={}, success={}, total={})",
+		log.debug("{}: handleSampleResults: cumulatedMetrics(hits={}, errors={}, success={}, total={})",
+				backendListenerContext.getParameter("name"),
 				allCumulatedMetrics.getHits(), allCumulatedMetrics.getErrors(), allCumulatedMetrics.getSuccesses(),
 				allCumulatedMetrics.getTotal());
 	}
 
 	@Override
 	public void run() {
-		log.debug("run started");
+		log.debug("{}: run started", name);
 		if (enabled) {
 			try {
 				sendMetrics();
 			} catch (Exception ex) {
-				log.error("Failed to send metrics", ex);
+				log.error("{}: Failed to send metrics: {}", name, ex.getMessage());
 			}
 		} else {
-			log.debug("skip sending metrics because the plugin has been disabled");
+			log.debug("{}: skip sending metrics because the plugin has been disabled", name);
 		}
-		log.debug("run finished");
+		log.debug("{}: run finished", name);
 	}
 
 	private void sendMetrics() {
