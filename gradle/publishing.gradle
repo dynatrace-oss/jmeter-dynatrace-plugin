@@ -3,12 +3,6 @@ publishing {
 		maven(MavenPublication) {
 			artifactId project.name
 			from components.java
-			artifact sourceJar {
-				classifier "sources"
-			}
-			artifact javadocJar {
-				classifier "javadoc"
-			}
 			pom {
 				name = "${project.group}:${project.name}"
 				packaging = 'jar'
@@ -28,10 +22,6 @@ publishing {
 			}
 		}
 	}
-}
-
-artifacts {
-	archives sourceJar, javadocZip, javadocJar
 }
 
 if (project.hasProperty("ossrhUsername") && project.ossrhUsername && project.hasProperty("ossrhPassword") && project.ossrhPassword) {
