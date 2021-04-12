@@ -8,7 +8,7 @@ plugins {
 apply from: 'gradle/publishing.gradle'
 
 group 'com.dynatrace.jmeter.plugins'
-version '1.6-SNAPSHOT'
+version '1.7.0'
 
 repositories {
     mavenCentral() {
@@ -19,6 +19,10 @@ repositories {
             ignoreGradleMetadataRedirection()
         }
     }
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 dependencies {
