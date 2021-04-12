@@ -1,16 +1,23 @@
 # Dynatrace Backend listener plugin for JMeter
 This library implements a JMeter Backend listener and sends the recorded loadtest metrics via the Dynatrace MINT metric ingest to the configured Dynatrace monitoring environment.
+
 See https://jmeter.apache.org/usermanual/component_reference.html#Backend_Listener for a description of the JMeter BackendListener concept.  
 
 # Building
-Execute the gradle build task. This will generate a "jmeter-dynatrace-plugin-1.0-SNAPSHOT.jar" in the build/libs directory
+Execute the gradle build task. This will generate a "jmeter-dynatrace-plugin-VERSION" in the build/libs directory
 
 # Prerequisites
 JMeter 5.3 (https://jmeter.apache.org/download_jmeter.cgi)
+
 Dynatrace Version > 1.202
 
 # Installation
 Copy this generated jar to the apache-jmeter-5.3\lib\ext folder and (re-)start JMeter
+
+# Maven repository
+The plugin is now also available in maven central
+
+See https://search.maven.org/artifact/com.dynatrace.jmeter.plugins/jmeter-dynatrace-plugin/1.7.0/jar
 
 # Configuration
 ## Dynatrace
