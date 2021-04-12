@@ -1,9 +1,14 @@
 plugins {
     id 'java'
+    id 'maven-publish'
+    id 'signing'
+    id 'io.github.gradle-nexus.publish-plugin' version '1.0.0'
 }
 
+apply from: 'gradle/publishing.gradle'
+
 group 'com.dynatrace.jmeter.plugins'
-version '1.5-SNAPSHOT'
+version '1.7.0'
 
 repositories {
     mavenCentral() {
@@ -14,6 +19,10 @@ repositories {
             ignoreGradleMetadataRedirection()
         }
     }
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 dependencies {
@@ -28,3 +37,4 @@ dependencies {
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.10.3'
     testImplementation group: 'junit', name: 'junit', version: '4.12'
 }
+

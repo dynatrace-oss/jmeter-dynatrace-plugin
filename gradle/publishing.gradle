@@ -1,0 +1,68 @@
+task javadocJar(type: Jar) {
+	classifier = 'javadoc'
+	from javadoc
+}
+
+task sourcesJar(type: Jar) {
+	classifier = 'sources'
+	from sourceSets.main.allSource
+}
+
+publishing {
+	publications {
+		maven(MavenPublication) {
+			artifactId project.name
+			from components.java
+			artifact sourcesJar
+			artifact javadocJar
+			pom {
+				name = "${project.group}:${project.name}"
+				packaging = 'jar'
+				description = 'Dynatrace Backend listener plugin for JMeter'
+				url = 'https://github.com/dynatrace-oss/jmeter-dynatrace-plugin'
+
+				scm {
+					url = 'https://github.com/dynatrace-oss/jmeter-dynatrace-plugin.git'
+				}
+
+				licenses {
+					license {
+						name = 'Apache License, Version 2.0'
+						url = 'http://www.apache.org/licenses/LICENSE-2.0'
+					}
+				}
+				developers {
+					developer {
+						id = 'Dynatrace'
+						name = 'Dynatrace LLC'
+						email = 'christian.inzko@dynatrace.com'
+					}
+				}
+			}
+		}
+	}
+}
+
+artifacts {
+	archives javadocJar, sourcesJar
+}
+
+signing {
+	sign publishing.publications.maven
+	sign configurations.archives
+}
+
+if (project.hasProperty("ossrhUsername") && project.ossrhUsername && project.hasProperty("ossrhPassword") && project.ossrhPassword) {
+	nexusPublishing {
+		packageGroup = "com.dynatrace"
+		useStaging = true
+		repositories {
+			sonatype {
+				nexusUrl = uri("https://oss.sonatype.org/service/local/")
+				snapshotRepositoryUrl = uri("https://oss.sonatype.org/content/repositories/snapshots/")
+				username = ossrhUsername
+				password = ossrhPassword
+			}
+		}
+	}
+}
