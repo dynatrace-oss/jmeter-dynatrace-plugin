@@ -31,6 +31,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpPost;
@@ -44,6 +45,7 @@ import org.apache.http.impl.nio.reactor.IOReactorConfig;
 import org.apache.http.nio.reactor.ConnectingIOReactor;
 import org.apache.http.util.EntityUtils;
 import org.apache.jmeter.report.utils.MetricUtils;
+import org.apache.jmeter.util.JMeterUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,6 +77,8 @@ public class MintMetricSender {
 		this.url = new URL(mintIngestUrl);
 		this.token = mintIngestToken;
 		this.name = name;
+		HttpHost proxy = new HttpHost(JMeterUtils.getJMeterProperties().getProperty("proxy"),
+				Integer.parseInt(JMeterUtils.getJMeterProperties().getProperty("port")));
 
 		IOReactorConfig ioReactorConfig = IOReactorConfig.custom().setIoThreadCount(MAX_THREADS).setConnectTimeout(CONNECT_TIMEOUT)
 				.setSoTimeout(SOCKET_TIMEOUT)
@@ -82,7 +86,7 @@ public class MintMetricSender {
 		ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor(ioReactorConfig);
 		PoolingNHttpClientConnectionManager connManager = new PoolingNHttpClientConnectionManager(ioReactor);
 		httpClient = HttpAsyncClientBuilder.create().setConnectionManager(connManager).setMaxConnPerRoute(MAX_CONNECTIONS)
-				.setMaxConnTotal(MAX_CONNECTIONS)
+				.setMaxConnTotal(MAX_CONNECTIONS).setProxy(proxy)
 				.setUserAgent("ApacheJMeter 5").disableCookieManagement().disableConnectionState().build();
 		httpRequest = createRequest(this.url, this.token);
 		httpClient.start();
