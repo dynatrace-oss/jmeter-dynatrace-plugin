@@ -26,6 +26,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.jmeter.config.Arguments;
@@ -53,6 +55,8 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 	private Map<String, String> transactionDimensions = new HashMap<>();
 	private boolean enabled;
 	private String name;
+	private String samplersRegex;
+	private Pattern samplersToFilter;
 
 	static {
 		DEFAULT_ARGS.put("dynatraceMetricIngestUrl", "https://DT_SERVER/api/v2/metrics/ingest");
@@ -61,6 +65,7 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 		DEFAULT_ARGS.put("transactionDimensions", "dt.entity.service=SERVICE-XXXXXXXXXXXXX");
 		DEFAULT_ARGS.put("enabled", "${__P(enabled, true)}");
 		DEFAULT_ARGS.put("name", "DT MINT Backendlistener");
+		DEFAULT_ARGS.put("samplersRegex", ".*");
 	}
 
 	@Override
@@ -73,6 +78,8 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 		String dynatraceMetricIngestUrl = context.getParameter("dynatraceMetricIngestUrl");
 		String dynatraceApiToken = context.getParameter("dynatraceApiToken");
 		name = context.getParameter("name");
+		samplersRegex = context.getParameter("samplersRegex", "");
+		samplersToFilter = Pattern.compile(samplersRegex);
 
 		final String testDimensionString = context.getParameter("testDimensions", "");
 		final String transactionDimensionString = context.getParameter("transactionDimensions", "");
@@ -152,8 +159,17 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 		log.debug("{}: handleSampleResults for {} samples", backendListenerContext.getParameter("name"), sampleResults.size());
 
 		UserMetric userMetrics = getUserMetrics();
+
+		Matcher matcher;
 		for (SampleResult sampleResult : sampleResults) {
 			userMetrics.add(sampleResult);
+
+			matcher = samplersToFilter.matcher(sampleResult.getSampleLabel());
+			if (matcher.find()) {
+				SamplerMetric samplerMetric = getSamplerMetric(sampleResult.getSampleLabel());
+				samplerMetric.add(sampleResult);
+			}
+
 			final SamplerMetric cumulatedMetrics = getSamplerMetric(sampleResult.getSampleLabel());
 			cumulatedMetrics.add(sampleResult);
 		}
