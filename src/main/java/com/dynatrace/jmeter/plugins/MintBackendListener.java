@@ -54,8 +54,8 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 	private Map<String, String> testDimensions = new HashMap<>();
 	private Map<String, String> transactionDimensions = new HashMap<>();
 	private boolean enabled;
-	private String name;
-	private String samplersRegex;
+	private String listenerName;
+	private String sendSamplersByRegex;
 	private Pattern samplersToFilter;
 
 	static {
@@ -71,15 +71,16 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 	@Override
 	public void setupTest(BackendListenerContext context) throws Exception {
 		super.setupTest(context);
-		log.info("{}: Test started", context.getParameter("name"));
+		listenerName = context.getParameter("name");
+		log.info("{}: Test started", listenerName);
 		scheduler = Executors.newScheduledThreadPool(1);
 		timerHandle = this.scheduler.scheduleAtFixedRate(this, 0L, SEND_INTERVAL, TimeUnit.SECONDS);
 		mintMetricSender = new MintMetricSender();
 		String dynatraceMetricIngestUrl = context.getParameter("dynatraceMetricIngestUrl");
 		String dynatraceApiToken = context.getParameter("dynatraceApiToken");
-		name = context.getParameter("name");
-		samplersRegex = context.getParameter("samplersRegex", "");
-		samplersToFilter = Pattern.compile(samplersRegex);
+
+		sendSamplersByRegex = context.getParameter("samplersRegex", "");
+		samplersToFilter = Pattern.compile(sendSamplersByRegex);
 
 		final String testDimensionString = context.getParameter("testDimensions", "");
 		final String transactionDimensionString = context.getParameter("transactionDimensions", "");
@@ -102,42 +103,42 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 
 		String enableParam = context.getParameter("enabled", "true");
 		enabled = Boolean.parseBoolean(enableParam);
-		log.info("{}: Configured enabled state {}", context.getParameter("name"), enabled);
-		log.info("{}: Configured test dimensions {}", context.getParameter("name"), testDimensions);
-		log.info("{}: Configured transaction dimensions {}", context.getParameter("name"), transactionDimensions);
+		log.info("{}: Configured enabled state {}", listenerName, enabled);
+		log.info("{}: Configured test dimensions {}", listenerName, testDimensions);
+		log.info("{}: Configured transaction dimensions {}", listenerName, transactionDimensions);
 
 		if (enabled) {
 			// only check the connection if the plugin was enabled
 			try {
-				mintMetricSender.setup(name, dynatraceMetricIngestUrl, dynatraceApiToken);
+				mintMetricSender.setup(listenerName, dynatraceMetricIngestUrl, dynatraceApiToken);
 				mintMetricSender.checkConnection();
-				log.info("{}: Start MINT metric sender for url {}", context.getParameter("name"), dynatraceMetricIngestUrl);
+				log.info("{}: Start MINT metric sender for url {}", listenerName, dynatraceMetricIngestUrl);
 			} catch (Exception ex) {
 				log.info("{}: Start MINT metric sender for url {} failed with {}, setting enabled state to false",
-						context.getParameter("name"), dynatraceMetricIngestUrl, ex.getMessage());
+						listenerName, dynatraceMetricIngestUrl, ex.getMessage());
 				// disable the plugin when the connection check fails
 				enabled = false;
 			}
 		}
-		log.info("{}: Enabled state {}", context.getParameter("name"), enabled);
+		log.info("{}: Enabled state {}", listenerName, enabled);
 	}
 
 	@Override
 	public void teardownTest(BackendListenerContext context) throws Exception {
-		log.info("{}: Test finished", context.getParameter("name"));
+		log.info("{}: Test finished", listenerName);
 		boolean cancelState = this.timerHandle.cancel(false);
-		log.debug("{}: Canceled state: {}", context.getParameter("name"), cancelState);
+		log.debug("{}: Canceled state: {}", listenerName, cancelState);
 		scheduler.shutdown();
 
 		try {
 			scheduler.awaitTermination(30L, TimeUnit.SECONDS);
 		} catch (InterruptedException var4) {
-			log.error("{}: Error waiting for end of scheduler", context.getParameter("name"));
+			log.error("{}: Error waiting for end of scheduler", listenerName);
 			Thread.currentThread().interrupt();
 		}
 
 		if (enabled) {
-			log.info("{}: Sending last metrics", context.getParameter("name"));
+			log.info("{}: Sending last metrics", listenerName);
 			this.sendMetrics();
 		}
 
@@ -156,48 +157,44 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 	@Override
 	public void handleSampleResults(List<SampleResult> sampleResults,
 			BackendListenerContext backendListenerContext) {
-		log.debug("{}: handleSampleResults for {} samples", backendListenerContext.getParameter("name"), sampleResults.size());
+		log.debug("{}: handleSampleResults for {} samples", listenerName, sampleResults.size());
 
 		UserMetric userMetrics = getUserMetrics();
 
-		Matcher matcher;
 		for (SampleResult sampleResult : sampleResults) {
 			userMetrics.add(sampleResult);
 
-			matcher = samplersToFilter.matcher(sampleResult.getSampleLabel());
-			if (matcher.find()) {
-				SamplerMetric samplerMetric = getSamplerMetric(sampleResult.getSampleLabel());
-				samplerMetric.add(sampleResult);
-			}
+			SamplerMetric samplerMetric = this.getSamplerMetric(sampleResult.getSampleLabel());
+			samplerMetric.add(sampleResult);
 
-			final SamplerMetric cumulatedMetrics = getSamplerMetric(sampleResult.getSampleLabel());
+			final SamplerMetric cumulatedMetrics = this.getSamplerMetric(sampleResult.getSampleLabel());
 			cumulatedMetrics.add(sampleResult);
 		}
 
 		log.debug("{}: handleSampleResults: UserMetrics(startedThreads={}, finishedThreads={})",
-				backendListenerContext.getParameter("name"),
+				listenerName,
 				getUserMetrics().getStartedThreads(),
 				getUserMetrics().getFinishedThreads());
 		final SamplerMetric allCumulatedMetrics = this.getSamplerMetric("all");
 		log.debug("{}: handleSampleResults: cumulatedMetrics(hits={}, errors={}, success={}, total={})",
-				backendListenerContext.getParameter("name"),
+				listenerName,
 				allCumulatedMetrics.getHits(), allCumulatedMetrics.getErrors(), allCumulatedMetrics.getSuccesses(),
 				allCumulatedMetrics.getTotal());
 	}
 
 	@Override
 	public void run() {
-		log.debug("{}: run started", name);
+		log.debug("{}: run started", listenerName);
 		if (enabled) {
 			try {
-				sendMetrics();
+				this.sendMetrics();
 			} catch (Exception ex) {
-				log.error("{}: Failed to send metrics: {}", name, ex.getMessage());
+				log.error("{}: Failed to send metrics: {}", listenerName, ex.getMessage());
 			}
 		} else {
-			log.debug("{}: skip sending metrics because the plugin has been disabled", name);
+			log.debug("{}: skip sending metrics because the plugin has been disabled", listenerName);
 		}
-		log.debug("{}: run finished", name);
+		log.debug("{}: run finished", listenerName);
 	}
 
 	private void sendMetrics() {
@@ -213,9 +210,16 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 			if ((entry.getKey()).equals("all")) {
 				// addCumulatedMetrics(metric);
 			} else {
-				addMetricsForTransaction(entry.getKey(), metric);
+				String transaction = entry.getKey();
+				log.debug("Checking if SampleLabel '{}' matches Regex '{}'", transaction, sendSamplersByRegex);
+				Matcher matcher = samplersToFilter.matcher(transaction);
+				if (matcher.find()) {
+					log.debug("Adding SampleLabel '{}' to samplerMetric-List", transaction);
+					addMetricsForTransaction(transaction, metric);
+				} else {
+					log.debug("SampleLabel '{}' does not match Regex '{}'", transaction, sendSamplersByRegex);
+				}
 			}
-
 			metric.resetForTimeInterval();
 		}
 
