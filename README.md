@@ -17,7 +17,7 @@ Copy this generated jar to the apache-jmeter-5.3\lib\ext folder and (re-)start J
 # Maven repository
 The plugin is now also available in maven central
 
-See https://search.maven.org/artifact/com.dynatrace.jmeter.plugins/jmeter-dynatrace-plugin/1.7.0/jar
+See https://search.maven.org/artifact/com.dynatrace.jmeter.plugins/jmeter-dynatrace-plugin/1.8.0/jar
 
 # Configuration
 ## Dynatrace
@@ -43,6 +43,7 @@ See https://search.maven.org/artifact/com.dynatrace.jmeter.plugins/jmeter-dynatr
     parameter `-Jenabled=false` to the start script.
   * `name`: The name of the listener which will be used as prefix for the log messages. If you have multiple listeners for multiple
     thread groups you should use unique names.
+  * `samplersRegex`: a regular expression which allows to filter the samplers which generate the metrics
 * Start the load test
 
 ### Debug logging
