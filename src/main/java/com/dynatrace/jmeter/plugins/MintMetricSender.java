@@ -16,19 +16,7 @@
 
 package com.dynatrace.jmeter.plugins;
 
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Scanner;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
+import com.dynatrace.mint.MintMetricsLine;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpResponse;
@@ -47,7 +35,20 @@ import org.apache.jmeter.report.utils.MetricUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.dynatrace.mint.MintMetricsLine;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Scanner;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 public class MintMetricSender {
 	private static final Logger log = LoggerFactory.getLogger(MintMetricSender.class);
@@ -220,7 +221,7 @@ public class MintMetricSender {
 		StringBuilder metricMessage = new StringBuilder();
 		while (metricsIterator.hasNext()) {
 			final MintMetricsLine metricsLine = metricsIterator.next();
-			String message = metricsLine.printMessage() + System.getProperty("line.separator");
+			String message = metricsLine.printMessage(false) + System.getProperty("line.separator");
 			if (metricLines + 1 < MAX_LINES_PER_MESSAGE && metricSize + message.length() < MAX_MESSAGE_SIZE_BYTES) {
 				metricMessage.append(message);
 				metricLines++;
@@ -284,4 +285,28 @@ public class MintMetricSender {
 
 		IOUtils.closeQuietly(httpClient);
 	}
+
+    public void setupMetrics() {
+        List<MintMetricsLine> metrics = new ArrayList<>(Arrays.asList(
+                new MintMetricsLine("jmeter.usermetrics.minactivethreads", "JMeter - min active threads", "count", "the minimum number of active threads"),
+                new MintMetricsLine("jmeter.usermetrics.maxactivethreads", "JMeter - max active threads", "count", "the maximum number of active threads"),
+                new MintMetricsLine("jmeter.usermetrics.meanactivethreads", "JMeter - mean active threads", "count", "the arithmetic mean of active threads"),
+                new MintMetricsLine("jmeter.usermetrics.startedthreads", "JMeter - started threads", "count", "the number of started threads"),
+                new MintMetricsLine("jmeter.usermetrics.finishedthreads", "JMeter - finished threads", "count", "the number of finished threads"),
+                new MintMetricsLine("jmeter.usermetrics.transaction.count", "JMeter - number of requests", "count", "the total number of requests"),
+                new MintMetricsLine("jmeter.usermetrics.transaction.success", "JMeter - successful requests", "count", "the number of successful requests"),
+                new MintMetricsLine("jmeter.usermetrics.transaction.error", "JMeter - failed requests", "count", "the number of failed requests"),
+                new MintMetricsLine("jmeter.usermetrics.transaction.hits", "JMeter - number of hits", "count", "the number of hits to the server"),
+                new MintMetricsLine("jmeter.usermetrics.transaction.mintime", "JMeter - min response time", "MilliSecond", "the minimal elapsed time for requests within sliding window"),
+                new MintMetricsLine("jmeter.usermetrics.transaction.maxtime", "JMeter - max response time", "MilliSecond", "the maximal elapsed time for requests within sliding window"),
+                new MintMetricsLine("jmeter.usermetrics.transaction.meantime", "JMeter - mean response time", "MilliSecond", "the arithmetic mean of the elapsed time"),
+                new MintMetricsLine("jmeter.usermetrics.transaction.sentbytes", "JMeter - sent bytes", "Byte", "the number of sent bytes"),
+                new MintMetricsLine("jmeter.usermetrics.transaction.receivedbytes", "JMeter - received bytes", "Byte", "the number of received bytes")
+        ));
+        String metricsString = metrics.stream()
+                .map(line -> line.printMessage(true) + System.getProperty("line.separator"))
+                .collect(Collectors.joining());
+        writeAndSendMetrics(metricsString);
+        log.info("{}: Successfully send metrics metadata", name);
+    }
 }
