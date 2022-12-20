@@ -147,28 +147,25 @@ public class MintMetricSender {
 			//
 		}
 		try {
-			final HttpResponse lastResponse = lastRequest.get(CONNECT_TIMEOUT, TimeUnit.MILLISECONDS);
-			int code = lastResponse.getStatusLine().getStatusCode();
-			if (MetricUtils.isSuccessCode(code)) {
-				log.debug("{}: Successfully checked connection", name);
-			} else {
-				log.warn("{}: Error writing metrics to MINT Url: {}, responseCode: {}, responseBody: {}",
-						name, new Object[] { url, code, getBody(lastResponse) });
+            final HttpResponse lastResponse = lastRequest.get(CONNECT_TIMEOUT, TimeUnit.MILLISECONDS);
+            int code = lastResponse.getStatusLine().getStatusCode();
+            // ok, message because of empty request: responseCode: 400, responseBody: {"linesOk":0,"linesInvalid":0,"error":{"code":400,"message":"empty request","invalidLines":[]}}
+            if (code >= 200 && code <= 400) {
+                log.debug("{}: Successfully checked connection", name);
+            } else {
+                log.warn("{}: Error writing metrics to MINT Url: {}, responseCode: {}, responseBody: {}",
+                        name, new Object[]{url, code, getBody(lastResponse)});
 
-				switch (code) {
-				case 400:
-					// ok, message because of empty request: responseCode: 400, responseBody: {"linesOk":0,"linesInvalid":0,"error":{"code":400,"message":"empty request","invalidLines":[]}}
-					break;
-				case 401:
-					throw new MintConnectionException("Error executing connection check for MINT server: Invalid token");
-				case 404:
-				case 405:
-					throw new MintConnectionException("Error executing connection check for MINT server: Invalid url");
-				default:
-					throw new MintConnectionException("Error executing connection check for MINT server: Other error");
-				}
+                switch (code) {
+                    case 401:
+                        throw new MintConnectionException("Error executing connection check for MINT server: Invalid token");
+                    case 404:
+                    case 405:
+                        throw new MintConnectionException("Error executing connection check for MINT server: Invalid url");
+                    default:
+                        throw new MintConnectionException("Error executing connection check for MINT server: Other error");
+                }
 			}
-
 		} catch (ExecutionException | TimeoutException | InterruptedException ex) {
 			log.warn("{}: Error executing connection check for MINT server: {}", name, ex.getMessage());
 			throw new MintConnectionException("General Error executing connection check for MINT server");
