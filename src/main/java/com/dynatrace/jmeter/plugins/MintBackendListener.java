@@ -16,6 +16,19 @@
 
 package com.dynatrace.jmeter.plugins;
 
+import com.dynatrace.mint.MintDimension;
+import com.dynatrace.mint.MintGauge;
+import com.dynatrace.mint.MintMetricsLine;
+import com.dynatrace.mint.SchemalessMetricSanitizer;
+import org.apache.jmeter.config.Arguments;
+import org.apache.jmeter.samplers.SampleResult;
+import org.apache.jmeter.visualizers.backend.AbstractBackendListenerClient;
+import org.apache.jmeter.visualizers.backend.BackendListenerContext;
+import org.apache.jmeter.visualizers.backend.SamplerMetric;
+import org.apache.jmeter.visualizers.backend.UserMetric;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -30,23 +43,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import org.apache.jmeter.config.Arguments;
-import org.apache.jmeter.samplers.SampleResult;
-import org.apache.jmeter.visualizers.backend.AbstractBackendListenerClient;
-import org.apache.jmeter.visualizers.backend.BackendListenerContext;
-import org.apache.jmeter.visualizers.backend.SamplerMetric;
-import org.apache.jmeter.visualizers.backend.UserMetric;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.dynatrace.mint.MintDimension;
-import com.dynatrace.mint.MintGauge;
-import com.dynatrace.mint.MintMetricsLine;
-import com.dynatrace.mint.SchemalessMetricSanitizer;
-
 public class MintBackendListener extends AbstractBackendListenerClient implements Runnable {
 	private static final Logger log = LoggerFactory.getLogger(MintBackendListener.class);
-	private static final Map<String, String> DEFAULT_ARGS = new HashMap();
+	private static final Map<String, String> DEFAULT_ARGS = new HashMap<>();
 	private static final long SEND_INTERVAL = 60;
 	private ScheduledExecutorService scheduler;
 	private ScheduledFuture<?> timerHandle;
@@ -112,6 +111,7 @@ public class MintBackendListener extends AbstractBackendListenerClient implement
 			try {
 				mintMetricSender.setup(listenerName, dynatraceMetricIngestUrl, dynatraceApiToken);
 				mintMetricSender.checkConnection();
+                mintMetricSender.setupMetrics();
 				log.info("{}: Start MINT metric sender for url {}", listenerName, dynatraceMetricIngestUrl);
 			} catch (Exception ex) {
 				log.info("{}: Start MINT metric sender for url {} failed with {}, setting enabled state to false",

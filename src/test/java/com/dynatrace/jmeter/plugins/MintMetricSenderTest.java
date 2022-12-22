@@ -1,17 +1,16 @@
 package com.dynatrace.jmeter.plugins;
 
-import static org.junit.Assert.assertEquals;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import org.junit.Before;
-import org.junit.Test;
-
 import com.dynatrace.mint.MintDimension;
 import com.dynatrace.mint.MintGauge;
 import com.dynatrace.mint.MintMetricsLine;
 import com.dynatrace.mint.SchemalessMetricSanitizer;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
 
 public class MintMetricSenderTest {
 	private MintMetricSender mintMetricSender;
@@ -69,7 +68,7 @@ public class MintMetricSenderTest {
 
 		while (messageSize < MintMetricSender.MAX_MESSAGE_SIZE_BYTES) {
 			MintMetricsLine line = createLine("metric-key-" + idx, idx, 100, "dimKey", "dimValue");
-			messageSize += line.printMessage().length();
+			messageSize += line.printMessage(false).length();
 			idx++;
 			lines.add(line);
 		}
@@ -77,6 +76,15 @@ public class MintMetricSenderTest {
 		assertEquals(2, splitMessages.size());
 
 	}
+
+    @Test
+    public void testCreateLineWithMetaData() {
+        MintMetricsLine line = new MintMetricsLine("jmeter.usermetrics.minactivethreads",
+                "JMeter - min active threads", "count", "the minimum number of active threads");
+        String metadataString = line.printMessage(true);
+        assertEquals("#jmeter.usermetrics.minactivethreads gauge dt.meta.unit=\"count\","
+                + "dt.meta.description=\"the minimum number of active threads\",dt.meta.displayname=\"JMeter - min active threads\"", metadataString);
+    }
 
 	private MintMetricsLine createLine(String metricKey, int metricValue, int nrDimensions, String dimensionKeyPrefix,
 			String dimensionValuePrefix) {

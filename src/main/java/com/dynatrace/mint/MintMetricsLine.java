@@ -28,7 +28,14 @@ public class MintMetricsLine {
 		this.metricKey = metricKey;
 	}
 
-	public void addDimension(MintDimension dimension) {
+    public MintMetricsLine(String metricKey, String displayName, String unit, String description) {
+        this(metricKey);
+        addDimension(new MintDimension("dt.meta.unit", unit));
+        addDimension(new MintDimension("dt.meta.description", description));
+        addDimension(new MintDimension("dt.meta.displayname", displayName));
+    }
+
+    public void addDimension(MintDimension dimension) {
 		dimensions.add(dimension);
 	}
 
@@ -36,14 +43,14 @@ public class MintMetricsLine {
 		gauges.add(gauge);
 	}
 
-	public String printMessage() {
+	public String printMessage(boolean metadata) {
 		StringBuilder dimensionString = new StringBuilder();
 		StringBuilder gaugeString = new StringBuilder();
 
 		for (MintDimension d : dimensions) {
 			dimensionString.append(d.dimensionKey);
 			dimensionString.append("=");
-			dimensionString.append(d.dimensionValue);
+            dimensionString.append(addQuotes(d.dimensionValue, metadata));
 			dimensionString.append(",");
 		}
 
@@ -59,16 +66,24 @@ public class MintMetricsLine {
 			gaugeString.setLength(gaugeString.length() - 1);
 		}
 
-		long timestampMillis = System.currentTimeMillis();
-		if (dimensionString.length() > 0) {
-			return metricKey + "," + dimensionString + " " + "gauge," + gaugeString + " " + timestampMillis;
-		} else {
-			return metricKey + " " + "gauge," + gaugeString + " " + timestampMillis;
-		}
+        long timestampMillis = System.currentTimeMillis();
+        if (dimensionString.length() > 0) {
+            if (metadata) {
+                return "#" + metricKey + " gauge " + dimensionString;
+            } else {
+                return metricKey + "," + dimensionString + " " + "gauge," + gaugeString + " " + timestampMillis;
+            }
+        } else {
+            return metricKey + " " + "gauge," + gaugeString + " " + timestampMillis;
+        }
 	}
 
-	@Override
+    private String addQuotes(String string, boolean addQuotes) {
+        return addQuotes ? ("\"" + string + "\"") : string;
+    }
+
+    @Override
 	public String toString() {
-		return printMessage();
+		return printMessage(false);
 	}
 }
